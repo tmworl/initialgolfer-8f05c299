@@ -151,17 +151,19 @@ const SubscriptionManagementSection = () => {
 /**
  * ProfileScreen Component
  * 
- * Displays user information and provides account management functionality.
- * Features handicap tracking with real-time database synchronization.
+ * Enhanced with target handicap functionality for personalized improvement tracking.
+ * Features handicap tracking with real-time database synchronization and validation.
  */
 export default function ProfileScreen() {
   // Access authentication context
   const { user, signOut } = useContext(AuthContext);
   
-  // Local state for form input and processing
+  // Local state for form inputs and processing
   const [handicap, setHandicap] = useState("");
+  const [targetHandicap, setTargetHandicap] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null); // 'success', 'error', or null
+  const [validationErrors, setValidationErrors] = useState({});
   
   // Load user profile data on mount
   useEffect(() => {
@@ -171,15 +173,20 @@ export default function ProfileScreen() {
       try {
         const { data, error } = await supabase
           .from('profiles')
-          .select('handicap')
+          .select('handicap, target_handicap')
           .eq('id', user.id)
           .single();
           
         if (error) throw error;
         
-        // Format handicap properly for display
-        if (data && data.handicap !== null) {
-          setHandicap(data.handicap.toString());
+        // Format handicaps properly for display
+        if (data) {
+          if (data.handicap !== null) {
+            setHandicap(data.handicap.toString());
+          }
+          if (data.target_handicap !== null) {
+            setTargetHandicap(data.target_handicap.toString());
+          }
         }
       } catch (error) {
         console.error("Error loading profile data:", error.message);
@@ -189,43 +196,79 @@ export default function ProfileScreen() {
     loadUserProfile();
   }, [user]);
   
+  // Validation function for target handicap
+  const validateTargetHandicap = useCallback((current, target) => {
+    const errors = {};
+    
+    if (current !== "" && target !== "") {
+      const currentValue = parseFloat(current);
+      const targetValue = parseFloat(target);
+      
+      if (!isNaN(currentValue) && !isNaN(targetValue)) {
+        if (targetValue >= currentValue) {
+          errors.targetHandicap = "Target handicap must be lower than current handicap";
+        }
+      }
+    }
+    
+    return errors;
+  }, []);
+  
   // Create debounced save function to prevent excessive database writes
-  const debouncedSaveHandicap = useCallback(
-    debounce(async (userId, newHandicap) => {
+  const debouncedSaveProfile = useCallback(
+    debounce(async (userId, newHandicap, newTargetHandicap) => {
       if (!userId) return;
       
       setIsSaving(true);
       setSaveStatus(null);
+      setValidationErrors({});
       
       try {
-        // Convert empty string to null for database consistency
+        // Validate target handicap before saving
+        const errors = validateTargetHandicap(newHandicap, newTargetHandicap);
+        if (Object.keys(errors).length > 0) {
+          setValidationErrors(errors);
+          setSaveStatus('error');
+          setTimeout(() => setSaveStatus(null), 3000);
+          return;
+        }
+        
+        // Convert empty strings to null for database consistency
         const handicapValue = newHandicap.trim() === "" 
           ? null 
           : parseFloat(newHandicap);
+          
+        const targetHandicapValue = newTargetHandicap.trim() === ""
+          ? null
+          : parseFloat(newTargetHandicap);
           
         // Execute database update with optimized query pattern
         const { error } = await supabase
           .from('profiles')
           .update({ 
             handicap: handicapValue,
+            target_handicap: targetHandicapValue,
             updated_at: new Date().toISOString()
           })
           .eq('id', userId);
           
         if (error) throw error;
         
+        // Clear any previous validation errors
+        setValidationErrors({});
+        
         // Indicate success briefly
         setSaveStatus('success');
         setTimeout(() => setSaveStatus(null), 2000);
       } catch (error) {
-        console.error("Error updating handicap:", error.message);
+        console.error("Error updating profile:", error.message);
         setSaveStatus('error');
         setTimeout(() => setSaveStatus(null), 3000);
       } finally {
         setIsSaving(false);
       }
     }, 600),
-    []
+    [validateTargetHandicap]
   );
   
   // Handle handicap input changes with validation
@@ -233,13 +276,29 @@ export default function ProfileScreen() {
     // Enforce numeric input pattern with period allowed
     if (text === "" || /^-?\d*\.?\d*$/.test(text)) {
       setHandicap(text);
+      // Clear validation errors when handicap changes
+      if (validationErrors.targetHandicap) {
+        setValidationErrors({});
+      }
     }
   };
   
-  // Handle blur event (when user finishes editing)
+  // Handle target handicap input changes with validation
+  const handleTargetHandicapChange = (text) => {
+    // Enforce numeric input pattern with period allowed
+    if (text === "" || /^-?\d*\.?\d*$/.test(text)) {
+      setTargetHandicap(text);
+      // Clear validation errors when target changes
+      if (validationErrors.targetHandicap) {
+        setValidationErrors({});
+      }
+    }
+  };
+  
+  // Handle blur event for any handicap field (when user finishes editing)
   const handleHandicapBlur = () => {
-    if (user && handicap !== "") {
-      debouncedSaveHandicap(user.id, handicap);
+    if (user) {
+      debouncedSaveProfile(user.id, handicap, targetHandicap);
     }
   };
   
@@ -257,7 +316,7 @@ export default function ProfileScreen() {
           isSuccess ? styles.successText : styles.errorText
         ]}
       >
-        {isSuccess ? "Handicap saved" : "Error saving handicap"}
+        {isSuccess ? "Profile saved" : "Error saving profile"}
       </Typography>
     );
   };
@@ -283,15 +342,16 @@ export default function ProfileScreen() {
             </View>
           </View>
           
-          {/* Handicap Section */}
+          {/* Enhanced Golf Profile Section */}
           <View style={styles.handicapSection}>
             <Typography variant="subtitle" style={styles.sectionTitle}>
               Golf Profile
             </Typography>
             
+            {/* Current Handicap */}
             <View style={styles.handicapContainer}>
               <Typography variant="body" style={styles.handicapLabel}>
-                Handicap
+                Current Handicap
               </Typography>
               
               <View style={styles.inputContainer}>
@@ -305,17 +365,49 @@ export default function ProfileScreen() {
                   returnKeyType="done"
                   maxLength={5} // Reasonable limit for handicap values
                 />
+              </View>
+            </View>
+            
+            {/* Target Handicap */}
+            <View style={styles.handicapContainer}>
+              <Typography variant="body" style={styles.handicapLabel}>
+                Target Handicap
+              </Typography>
+              
+              <View style={styles.inputContainer}>
+                <TextInput
+                  style={[
+                    styles.handicapInput,
+                    validationErrors.targetHandicap && styles.inputError
+                  ]}
+                  value={targetHandicap}
+                  onChangeText={handleTargetHandicapChange}
+                  onBlur={handleHandicapBlur}
+                  placeholder="Goal handicap"
+                  keyboardType="numeric"
+                  returnKeyType="done"
+                  maxLength={5}
+                />
                 
                 {isSaving && (
                   <View style={styles.loadingIndicator} />
                 )}
-                
-                {getStatusIndicator()}
               </View>
             </View>
             
+            {/* Status and Error Display */}
+            <View style={styles.statusContainer}>
+              {validationErrors.targetHandicap && (
+                <Typography variant="caption" style={styles.errorText}>
+                  {validationErrors.targetHandicap}
+                </Typography>
+              )}
+              
+              {getStatusIndicator()}
+            </View>
+            
             <Typography variant="caption" style={styles.helpText}>
-              Enter your official handicap index to track progress over time.
+              Set your target handicap to receive personalized improvement recommendations. Target must be lower than your current handicap.
             </Typography>
           </View>
           
@@ -400,6 +492,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
   },
+  inputError: {
+    borderBottomColor: theme.colors.error || '#D32F2F',
+  },
   loadingIndicator: {
     width: 6,
     height: 6,
@@ -407,6 +502,10 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primary,
     marginLeft: 8,
     opacity: 0.7,
+  },
+  statusContainer: {
+    marginTop: theme.spacing.small,
+    minHeight: 20, // Prevent layout shift
   },
   statusText: {
     marginLeft: 8,
@@ -445,9 +544,6 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 4,
     marginRight: 8,
-  },
-  statusText: {
-    flex: 1,
   },
   standardText: {
     marginBottom: theme.spacing.medium,
