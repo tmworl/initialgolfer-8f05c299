@@ -15,7 +15,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from '@react-navigation/native';
 import Layout from "../ui/Layout";
 import theme from "../ui/theme";
-import { createRound, saveHoleData, completeRound, deleteAbandonedRound } from "../services/roundservice";
+import { createRound, completeRound, deleteAbandonedRound } from "../services/roundservice";
 import ShotTable from "../components/ShotTable";
 import HoleNavigator from "../components/HoleNavigator";
 import { AuthContext } from "../context/AuthContext";
@@ -31,6 +31,7 @@ import DistanceIndicator from '../components/DistanceIndicator';
  * Enhanced to include POI data for each hole when available.
  * 
  * Enhanced with proper iOS and Android exit handling that deletes abandoned rounds.
+ * Enhanced with retry mechanism for failed round submissions.
  */
 export default function TrackerScreen({ navigation }) {
   // Get the authenticated user from context
@@ -517,7 +518,8 @@ export default function TrackerScreen({ navigation }) {
 
   /**
    * Complete the round - save all hole data to database
-   * Enhanced to include POI data in the saved hole_data
+   * Enhanced with retry mechanism and granular error handling
+   * MODIFIED: Removed database writing loop, now passes hole data to completeRound
    */
   const finishRound = async () => {
     try {
@@ -527,7 +529,7 @@ export default function TrackerScreen({ navigation }) {
       // Save current hole first
       await saveCurrentHoleToStorage();
       
-      // Get all stored hole data
+      // Get all stored hole data from AsyncStorage
       const storedDataStr = await AsyncStorage.getItem(`round_${round.id}_holes`);
       if (!storedDataStr) {
         throw new Error("No hole data found for this round");
@@ -535,59 +537,60 @@ export default function TrackerScreen({ navigation }) {
       
       const storedHoleData = JSON.parse(storedDataStr);
       
-      // Save each hole to the database
-      for (let holeNum = 1; holeNum <= totalHoles; holeNum++) {
-        // Skip holes with no data
-        if (!storedHoleData[holeNum] || storedHoleData[holeNum].shots.length === 0) {
-          continue;
-        }
-        
-        const holeInfo = storedHoleData[holeNum];
-        const totalScore = holeInfo.shots.length;
-        
-        // Create hole data object including POI data
-        const holeDataForDb = {
-          par: holeInfo.par,
-          distance: holeInfo.distance,
-          index: holeInfo.index,
-          features: holeInfo.features,
-          shots: holeInfo.shots,
-          poi: holeInfo.poi // Include POI data in database record
-        };
-        
-        // Save hole data to database
-        await saveHoleData(
-          round.id,
-          holeNum,
-          holeDataForDb,
-          totalScore
-        );
-        
-        console.log(`Hole ${holeNum} data saved to database`);
-      }
+      // Call completeRound with hole data - it will handle all database operations
+      await completeRound(round.id, storedHoleData, totalHoles);
       
-      // Complete the round
-      await completeRound(round.id);
       console.log("Round completed successfully");
       
       // Clear AsyncStorage data for this round
       await AsyncStorage.removeItem(`round_${round.id}_holes`);
       await AsyncStorage.removeItem("currentRound");
       
+      // Set loading to false BEFORE navigation
+      setLoading(false);
+      
       // Navigate to scorecard with replace to prevent back navigation to the tracker
-      // This creates a cleaner flow where completing a round leads directly to the scorecard
-      navigation.replace("ScorecardScreen", { 
+      navigation.replace("Scorecard", { 
         roundId: round.id,
         fromTracker: true // Add flag to indicate we came from tracker
       });
     } catch (error) {
       console.error("Error finishing round:", error);
       setLoading(false);
-      Alert.alert(
-        "Error",
-        "There was a problem completing your round. Please try again."
-      );
+      
+      // Show retry alert with specific error message
+      showRetryAlert(error.message || "Unknown error occurred");
     }
+  };
+
+  /**
+   * Show retry alert with specific error message
+   * Enhanced to provide granular error feedback and retry capability
+   */
+  const showRetryAlert = (errorMessage) => {
+    Alert.alert(
+      "Round Submission Failed",
+      `${errorMessage}\n\nWould you like to try again? Your round data is safely stored locally.`,
+      [
+        { 
+          text: "Cancel", 
+          style: "cancel",
+          onPress: () => {
+            // User chose not to retry, they can try again later
+            console.log("User cancelled retry");
+          }
+        },
+        { 
+          text: "Retry", 
+          style: "default",
+          onPress: () => {
+            // Retry the entire finishRound process
+            console.log("User chose to retry round submission");
+            finishRound();
+          }
+        }
+      ]
+    );
   };
 
   // Calculate total score for current hole
@@ -640,7 +643,7 @@ export default function TrackerScreen({ navigation }) {
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={theme.colors.primary} />
             <Typography variant="body" style={styles.loadingText}>
-              Saving your data...
+              Saving your round...
             </Typography>
           </View>
         ) : (
@@ -648,7 +651,7 @@ export default function TrackerScreen({ navigation }) {
             {/* 3. Distance Indicator - MAINTAINED POSITION */}
             <DistanceIndicator 
               holeData={holeData[currentHole]} 
-              active={!loading} 
+              active={true} // Always keep GPS active regardless of loading state
             />
             
             {/* 4. Shot Table - MAINTAINED POSITION BUT EXPANDED HEIGHT */}
