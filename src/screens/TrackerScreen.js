@@ -77,11 +77,17 @@ export default function TrackerScreen({ navigation }) {
   const [loading, setLoading] = useState(false);                // Loading state for async operations
   const [course, setCourse] = useState(null);                   // Current course data
   const [courseDetails, setCourseDetails] = useState(null);     // Detailed course data from database
+  const [isCompleting, setIsCompleting] = useState(false);     // New state variable for completion tracking
 
   // iOS Navigation Interception - Enhanced with delete logic
   useFocusEffect(
     useCallback(() => {
       const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+        // Skip alert during legitimate completion
+        if (isCompleting) {
+          return;
+        }
+        
         if (round && round.id) {
           e.preventDefault();
           
@@ -113,7 +119,7 @@ export default function TrackerScreen({ navigation }) {
         }
       });
       return unsubscribe;
-    }, [navigation, round, setLoading])
+    }, [navigation, round, setLoading, isCompleting])
   );
 
   // Android Hardware Back Button Handler - Enhanced with delete logic
@@ -121,6 +127,11 @@ export default function TrackerScreen({ navigation }) {
     const backHandler = BackHandler.addEventListener(
       'hardwareBackPress',
       () => {
+        // Skip alert during legitimate completion
+        if (isCompleting) {
+          return false;
+        }
+        
         if (round && round.id) {
           Alert.alert(
             "Exit Round?",
@@ -154,7 +165,7 @@ export default function TrackerScreen({ navigation }) {
     );
 
     return () => backHandler.remove();
-  }, [round, navigation, setLoading]);
+  }, [round, navigation, setLoading, isCompleting]);
 
   /**
    * Save the current hole data to AsyncStorage
@@ -525,6 +536,7 @@ export default function TrackerScreen({ navigation }) {
     try {
       // Show loading state
       setLoading(true);
+      setIsCompleting(true); // ADD THIS LINE
       
       // Save current hole first
       await saveCurrentHoleToStorage();
@@ -556,6 +568,7 @@ export default function TrackerScreen({ navigation }) {
       });
     } catch (error) {
       console.error("Error finishing round:", error);
+      setIsCompleting(false); // ADD THIS LINE
       setLoading(false);
       
       // Show retry alert with specific error message
