@@ -1,8 +1,9 @@
-// Modified version of src/components/InsightCard.js with Read More functionality
+// Modified version of src/components/InsightCard.js with Read More functionality + Markdown Support
 
 import React, { useState, useContext } from "react";
 import { View, StyleSheet, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import Markdown from 'react-native-markdown-display';
 import theme from "../ui/theme";
 import Typography from "../ui/components/Typography";
 import Card from "../ui/components/Card";
@@ -19,6 +20,7 @@ const CONTENT_PREVIEW_LENGTH = 150; // Maximum characters before truncation
  * conversion touchpoints and premium-exclusive features.
  * ENHANCED WITH READ MORE FUNCTIONALITY: Automatically truncates long content
  * and provides expansion toggle for better UX.
+ * ENHANCED WITH MARKDOWN SUPPORT: Renders markdown content with theme-matching styles.
  */
 const InsightCard = ({
   title,
@@ -119,16 +121,14 @@ const InsightCard = ({
         )}
       </View>
       
-      {/* Card content with flexible rendering - ENHANCED WITH TRUNCATION */}
+      {/* Card content with flexible rendering - ENHANCED WITH MARKDOWN SUPPORT */}
       <View style={styles.content}>
         {typeof content === 'string' ? (
           <>
-            <Typography 
-              variant="body"
-              style={styles.contentText}
-            >
+            {/* Replace Typography with Markdown for rich text rendering */}
+            <Markdown style={markdownStyles}>
               {displayContent}
-            </Typography>
+            </Markdown>
             
             {/* Read More/Less Toggle */}
             {shouldTruncate && (
@@ -203,6 +203,100 @@ const getVariantStyle = (variant) => {
         buttonVariant: "primary"
       };
   }
+};
+
+// Markdown styles that match your theme system
+const markdownStyles = {
+  body: {
+    fontSize: 16,
+    color: theme.colors.text,
+    fontFamily: theme.fonts.primary,
+    lineHeight: 22,
+  },
+  
+  heading1: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: theme.colors.text,
+    marginBottom: theme.spacing.small,
+    marginTop: theme.spacing.small,
+  },
+  
+  heading2: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: theme.colors.text,
+    marginBottom: theme.spacing.small,
+    marginTop: theme.spacing.small,
+  },
+  
+  heading3: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: theme.colors.text,
+    marginBottom: theme.spacing.xsmall,
+    marginTop: theme.spacing.small,
+  },
+  
+  paragraph: {
+    marginBottom: theme.spacing.small,
+    fontSize: 16,
+    lineHeight: 22,
+    color: theme.colors.text,
+  },
+  
+  strong: {
+    fontWeight: 'bold',
+    color: theme.colors.primary,
+  },
+  
+  em: {
+    fontStyle: 'italic',
+    color: theme.colors.text,
+  },
+  
+  bullet_list: {
+    marginBottom: theme.spacing.small,
+    marginLeft: theme.spacing.small,
+  },
+  
+  ordered_list: {
+    marginBottom: theme.spacing.small,
+    marginLeft: theme.spacing.small,
+  },
+  
+  list_item: {
+    marginBottom: theme.spacing.xsmall,
+    fontSize: 16,
+    lineHeight: 22,
+  },
+  
+  code_inline: {
+    backgroundColor: '#f5f5f5',
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 4,
+    fontSize: 14,
+    fontFamily: 'monospace',
+  },
+  
+  code_block: {
+    backgroundColor: '#f5f5f5',
+    padding: theme.spacing.small,
+    borderRadius: 8,
+    marginBottom: theme.spacing.small,
+    fontSize: 14,
+    fontFamily: 'monospace',
+  },
+  
+  blockquote: {
+    borderLeftWidth: 4,
+    borderLeftColor: theme.colors.primary,
+    paddingLeft: theme.spacing.small,
+    marginLeft: theme.spacing.small,
+    marginBottom: theme.spacing.small,
+    fontStyle: 'italic',
+  },
 };
 
 const styles = StyleSheet.create({

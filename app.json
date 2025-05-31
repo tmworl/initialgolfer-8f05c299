@@ -24,7 +24,7 @@
     },
     "icon": "./assets/icon.png",
     "android": {
-      "package": "com.tmworl.golfimprove",
+      "package": "com.tworl.golfscoretracker",
       "icon": "./assets/android/icon.png"
     },
     "ios": {
